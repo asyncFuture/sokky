@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 
 public class NioProvider implements Closeable {
 
-    private static final ExecutorService SERVICE = Executors.newFixedThreadPool(16);
+    private final ExecutorService service = Executors.newFixedThreadPool(16);
 
     private final Selector selector;
 
@@ -27,7 +27,7 @@ public class NioProvider implements Closeable {
                 while (iterator.hasNext()) {
                     SelectionKey key = iterator.next();
                     iterator.remove();
-                    if (key.isValid()) SERVICE.submit(() -> consumer.accept(key));
+                    if (key.isValid()) service.submit(() -> consumer.accept(key));
                     Thread.sleep(1);
                 }
             } catch (IOException | InterruptedException e) {
@@ -39,6 +39,7 @@ public class NioProvider implements Closeable {
     @Override
     public void close() throws IOException {
         selector.close();
+        service.shutdown();
     }
 
     public boolean isOpen() {
