@@ -5,9 +5,13 @@ import java.io.IOException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.Iterator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 public class NioProvider implements Closeable {
+
+    private static final ExecutorService SERVICE = Executors.newFixedThreadPool(16);
 
     private final Selector selector;
 
@@ -23,7 +27,7 @@ public class NioProvider implements Closeable {
                 while (iterator.hasNext()) {
                     SelectionKey key = iterator.next();
                     iterator.remove();
-                    if (key.isValid()) consumer.accept(key);
+                    if (key.isValid()) SERVICE.submit(() -> consumer.accept(key));
                     Thread.sleep(1);
                 }
             } catch (IOException | InterruptedException e) {
