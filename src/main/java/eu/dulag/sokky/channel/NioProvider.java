@@ -11,12 +11,20 @@ import java.util.function.Consumer;
 
 public class NioProvider implements Closeable {
 
-    private final ExecutorService service = Executors.newFixedThreadPool(16);
+    private final ExecutorService service;
+    private final boolean single;
 
     private final Selector selector;
 
-    public NioProvider(Selector selector) {
+    public NioProvider(int threads, Selector selector) {
+        if (threads <= 1) threads = 1;
+        this.service = Executors.newFixedThreadPool(threads);
+        this.single = threads == 1;
         this.selector = selector;
+    }
+
+    public NioProvider(Selector selector) {
+        this(8, selector);
     }
 
     public void select(Consumer<SelectionKey> consumer) {
@@ -40,6 +48,10 @@ public class NioProvider implements Closeable {
     public void close() throws IOException {
         selector.close();
         service.shutdown();
+    }
+
+    public boolean isMultithreading() {
+        return single;
     }
 
     public boolean isOpen() {
