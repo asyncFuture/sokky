@@ -20,10 +20,14 @@ public class NioClient implements Channel {
     private NioChannel channel;
     private Channel.Handler handler;
 
-    public NioClient() throws IOException {
+    public NioClient(int threads) throws IOException {
         this.selector = Selector.open();
-        this.provider = new NioProvider(selector);
+        this.provider = new NioProvider(threads, selector);
         this.socket = SocketChannel.open();
+    }
+
+    public NioClient() throws IOException {
+        this(8);
     }
 
     public void connect(Channel.Handler handler, SocketAddress address) throws IOException {
@@ -86,6 +90,10 @@ public class NioClient implements Channel {
     @Override
     public void closeFuture() {
         channel.closeFuture();
+    }
+
+    public boolean isMultithreading() {
+        return provider.isMultithreading();
     }
 
     @Override

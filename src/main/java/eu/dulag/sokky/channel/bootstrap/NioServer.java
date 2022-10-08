@@ -28,10 +28,14 @@ public class NioServer implements Channel {
 
     private final Map<SocketChannel, NioChannel> channelMap = new ConcurrentHashMap<>();
 
-    public NioServer() throws IOException {
+    public NioServer(int threads) throws IOException {
         this.selector = Selector.open();
-        this.provider = new NioProvider(selector);
+        this.provider = new NioProvider(threads, selector);
         this.socket = ServerSocketChannel.open();
+    }
+
+    public NioServer() throws IOException {
+        this(8);
     }
 
     public void bind(Channel.Handler handler, SocketAddress address) throws IOException {
@@ -100,6 +104,10 @@ public class NioServer implements Channel {
 
     @Override
     public void closeFuture() {
+    }
+
+    public boolean isMultithreading() {
+        return provider.isMultithreading();
     }
 
     @Override
