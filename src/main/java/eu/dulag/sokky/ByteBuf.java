@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 
 public class ByteBuf {
 
+    public static int BUFFER_LENGTH = 12;
+
     public static final ByteBuffer BUFFER = ByteBuffer.allocateDirect(1024);
 
     public static int length(int value) {
@@ -54,45 +56,33 @@ public class ByteBuf {
     }
 
     public ByteBuf write(ByteBuf value) {
-        if (buffer.remaining() - 1 < value.capacity()) enlarge(value.capacity());
-        while (value.isReadable()) writeByte(value.readByte());
-        return this;
+        return write(value.context());
     }
 
     public ByteBuf write(ByteBuffer value) {
-        if (buffer.remaining() - 1 < value.capacity()) enlarge(value.capacity());
+        int size = value.remaining();
+        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
         buffer.put(value);
         return this;
     }
 
-    public ByteBuf writeBytes(byte[] bytes) {
-        if (buffer.remaining() - bytes.length < 0) enlarge(bytes.length);
-        buffer.put(bytes);
-        return this;
-    }
-
-    public ByteBuf readBytes(byte[] bytes) {
-        buffer.get(bytes);
-        return this;
-    }
-
     public ByteBuf writeByte(byte value) {
-        if (buffer.remaining() - Byte.BYTES < 0) enlarge(Byte.BYTES);
+        if (buffer.remaining() <= 0) enlarge(1 + BUFFER_LENGTH);
         buffer.put(value);
         return this;
     }
 
     public byte readByte() {
         int remaining = buffer.remaining();
-        if (remaining - Byte.BYTES < 0) {
-            throw new RuntimeException("underflow(index:" + remaining + ", newIndex:" + (remaining - Byte.BYTES) + ")");
+        if (remaining <= 0) {
+            throw new IndexOutOfBoundsException("underflow(index:" + remaining + ", newIndex:" + (remaining - 1) + ")");
         }
         return buffer.get();
     }
 
     public ByteBuf writeInt(int value) {
-        int length = length(value);
-        if (buffer.remaining() - length < 0) enlarge(length);
+        int size = length(value);
+        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
 
         do {
             int part = value & 0x7F;
@@ -114,46 +104,60 @@ public class ByteBuf {
         return value;
     }
 
-    public ByteBuf writeLong(long value) {
-        if (buffer.remaining() < Long.BYTES) enlarge(Long.BYTES);
-        buffer.putLong(value);
-        return this;
-    }
-
-    public long readLong() {
-        int remaining = buffer.remaining();
-        if (remaining - Long.BYTES < 0) {
-            throw new RuntimeException("underflow(index:" + remaining + ", newIndex:" + (remaining - Long.BYTES) + ")");
-        }
-        return buffer.getLong();
-    }
-
     public ByteBuf writeShort(short value) {
-        if (buffer.remaining() < Short.BYTES) enlarge(Short.BYTES);
+        int size = Short.BYTES;
+        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
+
         buffer.putShort(value);
         return this;
     }
 
+    public long readLong() {
+        int readable = readable();
+        if ((readable - Long.BYTES) < 0)
+            throw new IndexOutOfBoundsException("underflow(index:" + readable + ", newIndex:" + (readable - Long.BYTES) + ")");
+        return buffer.getLong();
+    }
+
+    public ByteBuf writeLong(long value) {
+        int size = Long.BYTES;
+        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
+
+        buffer.putLong(value);
+        return this;
+    }
+
     public short readShort() {
-        int remaining = buffer.remaining();
-        if (remaining - Short.BYTES < 0) {
-            throw new RuntimeException("underflow(index:" + remaining + ", newIndex:" + (remaining - Short.BYTES) + ")");
-        }
+        int readable = readable();
+        if ((readable - Short.BYTES) < 0)
+            throw new IndexOutOfBoundsException("underflow(index:" + readable + ", newIndex:" + (readable - Short.BYTES) + ")");
         return buffer.getShort();
     }
 
+    public ByteBuf writeBool(boolean value) {
+        writeInt(value ? 1 : 0);
+        return this;
+    }
+
+    public boolean readBool() {
+        return readInt() == 1;
+    }
+
     public ByteBuf writeString(String value) {
-        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-        int size = (bytes.length + length(bytes.length));
-        if (buffer.remaining() < size) enlarge(size);
+        byte[] bytes = value.getBytes();
+        if ((readable() - bytes.length) <= 0) enlarge(length(bytes.length) + bytes.length + BUFFER_LENGTH);
         writeInt(bytes.length);
-        return writeBytes(bytes);
+        for (byte aByte : bytes) writeByte(aByte);
+        return this;
     }
 
     public String readString() {
         int length = readInt();
+        int readable = readable();
+        if ((readable - length) < 0)
+            throw new IndexOutOfBoundsException("underflow(index:" + readable + ", newIndex:" + (readable - length) + ")");
         byte[] bytes = new byte[length];
-        for (int i = 0; i < length; i++) bytes[i] = readByte();
+        buffer.get(bytes);
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
