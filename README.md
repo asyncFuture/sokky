@@ -13,7 +13,6 @@ You can define the thread number yourself.
 ````java
 NioProvider provider = new NioProvider(4 -> count of threads, Selector.open());
 ````
-
 ````java
 
 NioProvider provider = new NioProvider(Selector.open());
@@ -25,9 +24,19 @@ provider.select(key-> {
     }
 });
 ````
-#
-## Server
+## Buffer
+The buffers are based on Nio, so I just wrote an extension of the ByteBuffer. The biggest issue right now is managing the storage I'm already working on.
 
+### Snippet
+````java
+ByteBuf alloc = ByteBuf.alloc(512);
+alloc.writeString("Hello world");
+        
+alloc.flip();
+
+System.out.println(Arrays.toString(alloc.array()));
+````
+## Server
 ````java
 package eu.dulag.test;
 
@@ -66,7 +75,6 @@ public class TestServer {
     }
 }
 ````
-#
 ## Client
 ````java
 package eu.dulag.test;
