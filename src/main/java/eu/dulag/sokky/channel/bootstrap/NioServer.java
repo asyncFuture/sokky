@@ -11,8 +11,9 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.WeakHashMap;
 
 public class NioServer implements Channel {
 
@@ -26,7 +27,7 @@ public class NioServer implements Channel {
 
     private SocketAddress address;
 
-    private final Map<SocketChannel, NioChannel> channelMap = new ConcurrentHashMap<>();
+    private final Map<SocketChannel, NioChannel> channels = new HashMap<>();
 
     public NioServer(int threads) throws IOException {
         this.selector = Selector.open();
@@ -40,7 +41,7 @@ public class NioServer implements Channel {
 
     public void bind(Channel.Handler handler, SocketAddress address) throws IOException {
         this.socket.configureBlocking(false).register(selector, SelectionKey.OP_ACCEPT);
-        this.socket.bind(this.address = address);
+        this.socket.bind(this.address = address, 128);
         this.handler = handler;
         this.connected = true;
         this.provider.select(key -> {
@@ -50,21 +51,21 @@ public class NioServer implements Channel {
                     accept.configureBlocking(false).register(selector, SelectionKey.OP_READ);
 
                     NioChannel channel = new NioChannel(accept);
-                    channelMap.put(accept, channel);
+                    channels.put(accept, channel);
                     if (handler != null) handler.connected(channel);
                 } catch (IOException e) {
                     key.cancel();
                 }
             } else if (key.isReadable()) {
                 SocketChannel socket = (SocketChannel) key.channel();
-                NioChannel channel = channelMap.get(socket);
+                NioChannel channel = channels.get(socket);
 
                 ByteBuf buf = channel.read();
                 if (buf == null) {
                     key.cancel();
                     channel.close();
                     if (handler != null) handler.disconnected(channel);
-                    channelMap.remove(socket).closeFuture();
+                    channels.remove(socket).closeFuture();
                     return;
                 }
                 if (handler != null) handler.read(channel, buf);
@@ -75,7 +76,7 @@ public class NioServer implements Channel {
 
     @Override
     public void write(ByteBuf buf) {
-        channelMap.values().forEach(channel -> channel.write(buf));
+        for (NioChannel channel : channels.values()) channel.write(buf);
     }
 
     @Override
@@ -92,10 +93,10 @@ public class NioServer implements Channel {
             provider.close();
             socket.close();
 
-            channelMap.forEach((socket, channel) -> {
+            channels.forEach((socket, channel) -> {
                 channel.close();
                 if (handler != null) handler.disconnected(channel);
-                channelMap.remove(socket).closeFuture();
+                channels.remove(socket).closeFuture();
             });
         } catch (IOException e) {
             e.printStackTrace();
@@ -104,6 +105,7 @@ public class NioServer implements Channel {
 
     @Override
     public void closeFuture() {
+        channels.clear();
     }
 
     public boolean isMultithreading() {

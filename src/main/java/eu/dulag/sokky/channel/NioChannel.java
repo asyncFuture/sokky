@@ -15,7 +15,7 @@ public class NioChannel implements Channel {
 
     private boolean connected;
 
-    private final ByteBuf alloc = ByteBuf.alloc(0);
+    private ByteBuf alloc = ByteBuf.alloc(0);
 
     public NioChannel(SocketChannel socket) throws IOException {
         this.socket = socket;
@@ -45,9 +45,8 @@ public class NioChannel implements Channel {
 
     @Override
     public ByteBuf read() {
-        while (true) {
+        while (connected) {
             try {
-                if (!connected) break;
                 int read = socket.read(ByteBuf.BUFFER);
                 if (read == -1) break;
 
@@ -74,7 +73,7 @@ public class NioChannel implements Channel {
 
     @Override
     public void closeFuture() {
-        alloc.clear();
+        alloc = null;
     }
 
     @Override
