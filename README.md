@@ -66,7 +66,6 @@ public class TestClient {
                     ByteBuf buf = ByteBuf.allocDirect(0);
                     buf.writeString("Hello world");
 
-                    client.close();
                     channel.write(buf);
                 }
 
