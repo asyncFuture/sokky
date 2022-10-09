@@ -1,7 +1,33 @@
 # sokky
+
 a simple network library for handling Nio sockets
 
+The Library is based on NIO to achieve the best possible performance.
+
+## Provider
+
+This is the provider system, which allows very simple handling of the processing of the keys. In addition, 
+the processing is done via an ExecutorService, which further improves thread safety.
+
+You can define the thread number yourself.
+````java
+NioProvider provider = new NioProvider(4 -> count of threads, Selector.open());
+````
+
+````java
+
+NioProvider provider = new NioProvider(Selector.open());
+provider.select(key-> {
+    if(key.isAcceptable()){
+        //accept a channel with provider
+    } else if(key.isReadable()){
+        //read channel
+    }
+});
+````
+
 ## Server
+
 ````java
 package eu.dulag.test;
 
