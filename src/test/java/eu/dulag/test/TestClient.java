@@ -6,7 +6,6 @@ import eu.dulag.sokky.channel.bootstrap.NioClient;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 
 public class TestClient {
 
@@ -17,11 +16,19 @@ public class TestClient {
                 @Override
                 public void connected(Channel channel) {
                     System.out.println(channel.remoteAddress() + " has connected");
+
+                    ByteBuf buf = ByteBuf.alloc(0);
+                    buf.writeString("Hello world");
+
+                    channel.write(buf);
                 }
 
                 @Override
                 public void read(Channel channel, ByteBuf buf) {
-                    System.out.println(channel.remoteAddress() + " bytes: " + Arrays.toString(buf.array()));
+                    int length = buf.readInt();
+                    String string = buf.readString();
+
+                    System.out.println(channel.remoteAddress() + " message: " + string);
                 }
 
                 @Override
@@ -31,7 +38,7 @@ public class TestClient {
             }, new InetSocketAddress("127.0.0.1", 25565));
             client.closeFuture();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
     }
 }

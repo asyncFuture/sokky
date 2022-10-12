@@ -5,7 +5,6 @@ import eu.dulag.sokky.channel.Channel;
 import eu.dulag.sokky.channel.bootstrap.NioServer;
 
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 
 public class TestServer {
 
@@ -20,7 +19,10 @@ public class TestServer {
 
                 @Override
                 public void read(Channel channel, ByteBuf buf) {
-                    System.out.println(channel.remoteAddress() + " bytes: " + Arrays.toString(buf.array()));
+                    int length = buf.readInt();
+                    String string = buf.readString();
+
+                    System.out.println(channel.remoteAddress() + " message: " + string);
                 }
 
                 @Override
