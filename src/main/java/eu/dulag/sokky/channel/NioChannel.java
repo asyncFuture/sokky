@@ -28,18 +28,14 @@ public class NioChannel implements Channel {
     public void write(ByteBuf buf) {
         try {
             if (buf.readable() == 0) buf.flip();
-
             int readable = buf.readable();
-            int size = (ByteBuf.length(readable) + readable);
+            ByteBuffer buffer = ByteBuffer.allocate(readable + Integer.BYTES);
+            buffer.putInt(readable);
+            buffer.put(buf.context());
 
-            ByteBuf alloc = ByteBuf.alloc(size);
-            alloc.writeInt(readable);
-            alloc.write(buf);
-
-            socket.write(buf.flip().context());
-            buf.flip();
+            socket.write((ByteBuffer) buffer.flip());
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
