@@ -1,53 +1,98 @@
 package eu.dulag.sokky;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class ByteBuf {
 
-    public static int BUFFER_LENGTH = 12;
+    private enum DataType {
 
-    public static final ByteBuffer BUFFER = ByteBuffer.allocateDirect(1024);
+        BYTE(byte.class, Byte.BYTES, "put", "get"),
+        INT(int.class, Integer.BYTES, "putInt", "getInt"),
+        LONG(long.class, Long.BYTES, "putLong", "getLong"),
+        SHORT(short.class, Short.BYTES, "putShort", "getShort"),
+        CHAR(char.class, Character.BYTES, "putChar", "getChar"),
+        DOUBLE(double.class, Double.BYTES, "putDouble", "getDouble"),
+        FLOAT(float.class, Float.BYTES, "putFloat", "getFloat");
 
-    public static int length(int value) {
-        if ((value & 0xFFFFFF80) == 0) return 1;
-        if ((value & 0xFFFFC000) == 0) return 2;
-        if ((value & 0xFFE00000) == 0) return 3;
-        if ((value & 0xF0000000) == 0) return 4;
-        return 5;
+        final Class<?> clazz;
+        final int length;
+        final String[] invokes;
+
+        DataType(Class<?> clazz, int length, String... invokes) {
+            this.clazz = clazz;
+            this.length = length;
+            this.invokes = invokes;
+        }
+
+        @SuppressWarnings("unchecked")
+        <T> T get(ByteBuf buf) {
+            try {
+                if (outOfBounds(buf, length)) throw new BufferUnderflowException();
+                ByteBuffer buffer = buf.context();
+                Method method = buffer.getClass().getMethod(invokes[1]);
+                method.setAccessible(true);
+                return (T) method.invoke(buffer);
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new BufferUnderflowException();
+            }
+        }
+
+        ByteBuf put(ByteBuf buf, Object value) {
+            try {
+                if (outOfBounds(buf, length)) buf.enlarge(length);
+                ByteBuffer buffer = buf.context();
+
+                Method method = buffer.getClass().getMethod(invokes[0], clazz);
+                method.setAccessible(true);
+                method.invoke(buffer, value);
+                return buf;
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                throw new BufferOverflowException();
+            }
+        }
+
+        private static DataType find(Class<?> clazz) {
+            return Arrays.stream(values()).filter(dataType -> dataType.clazz.equals(clazz)).findFirst().orElse(null);
+        }
+    }
+
+    public static final ByteBuffer BUFFER = alloc(1024, true);
+
+    protected static ByteBuffer alloc(int capacity, boolean direct) {
+        return direct ? ByteBuffer.allocateDirect(capacity) : ByteBuffer.allocate(capacity);
     }
 
     public static ByteBuf alloc(int capacity) {
-        return new ByteBuf(false, capacity);
+        return new ByteBuf(capacity, false);
     }
 
     public static ByteBuf allocDirect(int capacity) {
-        return new ByteBuf(true, capacity);
+        return new ByteBuf(capacity, true);
     }
 
-    protected final boolean direct;
-    protected ByteBuffer buffer;
+    private static boolean outOfBounds(ByteBuf buf, int size) {
+        int remaining = buf.readable();
+        return (remaining - size < 0);
+    }
 
-    protected int offset;
+    private final boolean direct;
+    private ByteBuffer buffer;
 
-    protected ByteBuf(boolean direct, int capacity) {
+    public ByteBuf(int capacity, boolean direct) {
         this.direct = direct;
-        this.buffer = direct ? ByteBuffer.allocateDirect(capacity) : ByteBuffer.allocate(capacity);
-    }
-
-    public ByteBuf flip() {
-        buffer.flip();
-        return this;
-    }
-
-    public void clear() {
-        buffer.clear();
+        this.buffer = alloc(capacity, direct);
     }
 
     public ByteBuf enlarge(int capacity) {
         int size = (buffer.capacity() + capacity);
-        ByteBuffer enlarge = direct ? ByteBuffer.allocateDirect(size) : ByteBuffer.allocate(size);
 
+        ByteBuffer enlarge = alloc(size, direct);
         enlarge.put((ByteBuffer) buffer.flip());
 
         buffer = enlarge;
@@ -55,109 +100,90 @@ public class ByteBuf {
         return this;
     }
 
-    public ByteBuf write(ByteBuf value) {
-        return write(value.context());
+    public <T> T get(Class<T> clazz) {
+        return DataType.find(clazz).get(this);
+    }
+
+    public ByteBuf put(Class<?> clazz, Object value) {
+        DataType.find(clazz).put(this, value);
+        return this;
     }
 
     public ByteBuf write(ByteBuffer value) {
-        int size = value.remaining();
-        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
         buffer.put(value);
         return this;
     }
 
     public ByteBuf writeByte(byte value) {
-        if (buffer.remaining() <= 0) enlarge(1 + BUFFER_LENGTH);
-        buffer.put(value);
-        return this;
+        return put(byte.class, value);
     }
 
     public byte readByte() {
-        int remaining = buffer.remaining();
-        if (remaining <= 0) {
-            throw new IndexOutOfBoundsException("underflow(index:" + remaining + ", newIndex:" + (remaining - 1) + ")");
-        }
         return buffer.get();
     }
 
     public ByteBuf writeInt(int value) {
-        int size = length(value);
-        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
-
-        do {
-            int part = value & 0x7F;
-            value >>>= 7;
-            if (value != 0) part |= 0x80;
-            writeByte((byte) part);
-        } while (value != 0);
-        return this;
+        return put(int.class, value);
     }
 
     public int readInt() {
-        int value = 0, bytes = 0;
-        byte b;
-        do {
-            b = readByte();
-            value |= (b & 0x7F) << (bytes++ * 7);
-            if (bytes > 5) return value;
-        } while ((b & 0x80) == 0x80);
-        return value;
-    }
-
-    public ByteBuf writeShort(short value) {
-        int size = Short.BYTES;
-        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
-
-        buffer.putShort(value);
-        return this;
-    }
-
-    public long readLong() {
-        int readable = readable();
-        if ((readable - Long.BYTES) < 0)
-            throw new IndexOutOfBoundsException("underflow(index:" + readable + ", newIndex:" + (readable - Long.BYTES) + ")");
-        return buffer.getLong();
+        return get(int.class);
     }
 
     public ByteBuf writeLong(long value) {
-        int size = Long.BYTES;
-        if ((readable() - size) <= 0) enlarge(size + BUFFER_LENGTH);
-
-        buffer.putLong(value);
-        return this;
+        return put(long.class, value);
     }
 
-    public short readShort() {
-        int readable = readable();
-        if ((readable - Short.BYTES) < 0)
-            throw new IndexOutOfBoundsException("underflow(index:" + readable + ", newIndex:" + (readable - Short.BYTES) + ")");
-        return buffer.getShort();
+    public long readLong() {
+        return get(long.class);
     }
 
-    public ByteBuf writeBool(boolean value) {
-        writeInt(value ? 1 : 0);
-        return this;
+    public ByteBuf writeShort(short value) {
+        return put(short.class, value);
     }
 
-    public boolean readBool() {
-        return readInt() == 1;
+    public long readShort() {
+        return get(Short.class);
+    }
+
+    public ByteBuf writeChar(char value) {
+        return put(char.class, value);
+    }
+
+    public char readChar() {
+        return get(char.class);
+    }
+
+    public ByteBuf writeDouble(double value) {
+        return put(double.class, value);
+    }
+
+    public double readDouble() {
+        return get(double.class);
+    }
+
+    public ByteBuf writeFloat(float value) {
+        return put(float.class, value);
+    }
+
+    public float readFloat() {
+        return get(float.class);
     }
 
     public ByteBuf writeString(String value) {
-        byte[] bytes = value.getBytes();
-        if ((readable() - bytes.length) <= 0) enlarge(length(bytes.length) + bytes.length + BUFFER_LENGTH);
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+
+        if (outOfBounds(this, Integer.BYTES + bytes.length)) enlarge(Integer.BYTES + bytes.length);
         writeInt(bytes.length);
         for (byte aByte : bytes) writeByte(aByte);
+
         return this;
     }
 
     public String readString() {
         int length = readInt();
-        int readable = readable();
-        if ((readable - length) < 0)
-            throw new IndexOutOfBoundsException("underflow(index:" + readable + ", newIndex:" + (readable - length) + ")");
         byte[] bytes = new byte[length];
-        buffer.get(bytes);
+        for (int i = 0; i < length; i++) bytes[i] = readByte();
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
@@ -165,11 +191,29 @@ public class ByteBuf {
         return buffer;
     }
 
-    public byte[] array() {
-        if (direct) throw new UnsupportedOperationException();
+    public ByteBuf clear() {
+        buffer.clear();
+        return this;
+    }
+
+    public ByteBuf flip() {
+        buffer.flip();
+        return this;
+    }
+
+    public void detach() {
+
+    }
+
+    public byte[] array(boolean raw) {
+        if (raw) return buffer.array();
         byte[] bytes = new byte[buffer.remaining()];
         buffer.get(bytes);
         return bytes;
+    }
+
+    public byte[] array() {
+        return array(false);
     }
 
     public boolean isDirect() {
