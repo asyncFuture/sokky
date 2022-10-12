@@ -14,7 +14,6 @@ You can define the thread number yourself.
 NioProvider provider = new NioProvider(4 -> count of threads, Selector.open());
 ````
 ````java
-
 NioProvider provider = new NioProvider(Selector.open());
 provider.select(key-> {
     if(key.isAcceptable()){
@@ -45,13 +44,12 @@ import eu.dulag.sokky.channel.Channel;
 import eu.dulag.sokky.channel.bootstrap.NioServer;
 
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 
 public class TestServer {
 
     public static void main(String[] args) {
         try {
-            NioServer server = new NioServer(4);
+            NioServer server = new NioServer();
             server.bind(new Channel.Handler() {
                 @Override
                 public void connected(Channel channel) {
@@ -60,7 +58,10 @@ public class TestServer {
 
                 @Override
                 public void read(Channel channel, ByteBuf buf) {
-                    System.out.println(channel.remoteAddress() + " bytes" + Arrays.toString(buf.array()));
+                    int length = buf.readInt();
+                    String string = buf.readString();
+
+                    System.out.println(channel.remoteAddress() + " message: " + string);
                 }
 
                 @Override
@@ -83,20 +84,20 @@ import eu.dulag.sokky.ByteBuf;
 import eu.dulag.sokky.channel.Channel;
 import eu.dulag.sokky.channel.bootstrap.NioClient;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 
 public class TestClient {
 
     public static void main(String[] args) {
         try {
-            NioClient client = new NioClient(4);
+            NioClient client = new NioClient();
             client.connect(new Channel.Handler() {
                 @Override
                 public void connected(Channel channel) {
                     System.out.println(channel.remoteAddress() + " has connected");
 
-                    ByteBuf buf = ByteBuf.allocDirect(0);
+                    ByteBuf buf = ByteBuf.alloc(0);
                     buf.writeString("Hello world");
 
                     channel.write(buf);
@@ -104,7 +105,10 @@ public class TestClient {
 
                 @Override
                 public void read(Channel channel, ByteBuf buf) {
-                    System.out.println(channel.remoteAddress() + " bytes" + Arrays.toString(buf.array()));
+                    int length = buf.readInt();
+                    String string = buf.readString();
+
+                    System.out.println(channel.remoteAddress() + " message: " + string);
                 }
 
                 @Override
@@ -113,7 +117,7 @@ public class TestClient {
                 }
             }, new InetSocketAddress("127.0.0.1", 25565));
             client.closeFuture();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
