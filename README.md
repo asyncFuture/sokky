@@ -35,7 +35,7 @@ alloc.flip();
 
 System.out.println(Arrays.toString(alloc.array()));
 ````
-### Blocking
+## Blocking
 
 What can the blocking element do?
 
