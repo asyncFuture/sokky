@@ -20,9 +20,9 @@ public class NioProvider implements Closeable {
     private final Selector selector;
 
     private final Blocking<ByteBuffer> blocking = new Blocking<>(
-            ByteBuffer.allocateDirect(1),
-            ByteBuffer.allocateDirect(1),
-            ByteBuffer.allocateDirect(1)
+            ByteBuffer.allocateDirect(1024),
+            ByteBuffer.allocateDirect(1024),
+            ByteBuffer.allocateDirect(1024)
     );
 
     public NioProvider(int threads, Selector selector) {
