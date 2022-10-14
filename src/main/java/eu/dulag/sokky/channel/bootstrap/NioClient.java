@@ -41,7 +41,7 @@ public class NioClient implements Channel {
                     socket.finishConnect();
 
                     if(channel != null) return;
-                    channel = new NioChannel(socket);
+                    channel = new NioChannel(provider, socket);
                     if (handler != null) handler.connected(channel);
                 } catch (IOException e) {
                     key.cancel();

@@ -49,7 +49,7 @@ public class NioServer implements Channel {
                     SocketChannel accept = socket.accept();
                     accept.configureBlocking(false).register(selector, SelectionKey.OP_READ);
 
-                    NioChannel channel = new NioChannel(accept);
+                    NioChannel channel = new NioChannel(provider, accept);
                     channels.put(accept, channel);
                     if (handler != null) handler.connected(channel);
                 } catch (IOException e) {
