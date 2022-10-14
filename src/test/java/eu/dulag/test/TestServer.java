@@ -19,10 +19,12 @@ public class TestServer {
 
                 @Override
                 public void read(Channel channel, ByteBuf buf) {
-                    int length = buf.readInt();
-                    String string = buf.readString();
+                    while (buf.isReadable()) {
+                        int length = buf.readInt();
+                        String string = buf.readString();
 
-                    System.out.println(channel.remoteAddress() + " message: " + string);
+                        System.out.println(channel.remoteAddress() + " message: " + string);
+                    }
                 }
 
                 @Override

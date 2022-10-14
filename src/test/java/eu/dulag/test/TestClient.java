@@ -17,9 +17,7 @@ public class TestClient {
                 public void connected(Channel channel) {
                     System.out.println(channel.remoteAddress() + " has connected");
 
-                    ByteBuf buf = ByteBuf.alloc(0);
-                    buf.writeString("Hello world");
-
+                    ByteBuf buf = ByteBuf.alloc(0).writeString("Hello world");
                     channel.write(buf);
                 }
 
