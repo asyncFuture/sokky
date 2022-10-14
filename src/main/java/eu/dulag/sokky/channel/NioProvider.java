@@ -1,7 +1,10 @@
 package eu.dulag.sokky.channel;
 
+import eu.dulag.sokky.Blocking;
+
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.Iterator;
@@ -15,6 +18,12 @@ public class NioProvider implements Closeable {
     private final boolean single;
 
     private final Selector selector;
+
+    private final Blocking<ByteBuffer> blocking = new Blocking<>(
+            ByteBuffer.allocateDirect(1),
+            ByteBuffer.allocateDirect(1),
+            ByteBuffer.allocateDirect(1)
+    );
 
     public NioProvider(int threads, Selector selector) {
         if (threads <= 1) threads = 1;
@@ -48,6 +57,15 @@ public class NioProvider implements Closeable {
     public void close() throws IOException {
         selector.close();
         service.shutdown();
+        blocking.clear();
+    }
+
+    public ByteBuffer await() throws InterruptedException {
+        return blocking.await();
+    }
+
+    public void detach(ByteBuffer buffer) {
+        blocking.detach(buffer);
     }
 
     public boolean isMultithreading() {
