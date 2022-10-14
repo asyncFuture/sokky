@@ -9,6 +9,7 @@ import java.nio.channels.SocketChannel;
 
 public class NioChannel implements Channel {
 
+    private final NioProvider provider;
     private final SocketChannel socket;
 
     private final SocketAddress localAddress, remoteAddress;
@@ -17,7 +18,8 @@ public class NioChannel implements Channel {
 
     private ByteBuf alloc = ByteBuf.alloc(0);
 
-    public NioChannel(SocketChannel socket) throws IOException {
+    public NioChannel(NioProvider provider, SocketChannel socket) throws IOException {
+        this.provider = provider;
         this.socket = socket;
         this.localAddress = socket.getLocalAddress();
         this.remoteAddress = socket.getRemoteAddress();
@@ -41,20 +43,28 @@ public class NioChannel implements Channel {
 
     @Override
     public ByteBuf read() {
-        while (connected) {
-            try {
-                int read = socket.read(ByteBuf.BUFFER);
-                if (read == -1) break;
-
-                if (read == 0) return alloc.flip();
-                alloc.enlarge(read).write((ByteBuffer) ByteBuf.BUFFER.flip());
-                ByteBuf.BUFFER.clear();
-                if (read < ByteBuf.BUFFER.remaining()) return alloc.flip();
-            } catch (Exception exception) {
-                return null;
+        try {
+            ByteBuffer buffer = provider.await();
+            while (true) {
+                try {
+                    int read = socket.read(buffer);
+                    if (read == -1) break;
+                    if (read == 0) break;
+                    alloc.enlarge(read).write((ByteBuffer) buffer.flip());
+                    buffer.clear();
+                    if (read < buffer.remaining()) break;
+                } catch (Exception exception) {
+                    break;
+                }
             }
+            provider.detach(buffer);
+
+            alloc.flip();
+            if (alloc.readable() == 0) return null;
+            return alloc;
+        } catch (InterruptedException exception) {
+            return null;
         }
-        return null;
     }
 
     @Override
