@@ -43,28 +43,29 @@ public class NioChannel implements Channel {
 
     @Override
     public ByteBuf read() {
-        try {
-            ByteBuffer buffer = provider.await();
-            while (true) {
-                try {
-                    int read = socket.read(buffer);
-                    if (read == -1) break;
-                    if (read == 0) break;
-                    alloc.enlarge(read).write((ByteBuffer) buffer.flip());
-                    buffer.clear();
-                    if (read < buffer.remaining()) break;
-                } catch (Exception exception) {
-                    break;
-                }
+        ByteBuffer buffer = null;
+        while (true) {
+            try {
+                if (buffer == null) buffer = provider.await();
+                int read = socket.read(buffer);
+                if (read == -1) break;
+                if (read == 0) break;
+                alloc.enlarge(read).write((ByteBuffer) buffer.flip());
+                buffer.clear();
+                if (read < buffer.remaining()) break;
+            } catch (Exception exception) {
+                break;
             }
-            provider.detach(buffer);
-
-            alloc.flip();
-            if (alloc.readable() == 0) return null;
-            return alloc;
-        } catch (InterruptedException exception) {
+        }
+        if(buffer == null) {
+            alloc.clear();
             return null;
         }
+        provider.detach(buffer);
+
+        alloc.flip();
+        if (alloc.readable() == 0) return null;
+        return alloc;
     }
 
     @Override
