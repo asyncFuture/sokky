@@ -35,6 +35,30 @@ alloc.flip();
 
 System.out.println(Arrays.toString(alloc.array()));
 ````
+### Blocking
+
+What can the blocking element do?
+
+The blacklist ensures that an object can only be accessed once. 
+When you are finished with the object you can release it.
+
+````java
+Blocking<String> blocking = new Blocking<>();
+blocking.add("Forrest Gump");
+blocking.add("Spider Man");
+
+//hopes that an object is free
+String poll = blocking.poll();
+System.out.println(poll);
+
+//blocks the thread until an object is free
+String await = blocking.await();
+System.out.println(await);
+
+//release objects
+blocking.detach(poll);
+blocking.detach(await);
+````
 ## Server
 ````java
 package eu.dulag.test;
