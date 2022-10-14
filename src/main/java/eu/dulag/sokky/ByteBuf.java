@@ -12,13 +12,7 @@ public class ByteBuf {
 
     private enum DataType {
 
-        BYTE(byte.class, Byte.BYTES, "put", "get"),
-        INT(int.class, Integer.BYTES, "putInt", "getInt"),
-        LONG(long.class, Long.BYTES, "putLong", "getLong"),
-        SHORT(short.class, Short.BYTES, "putShort", "getShort"),
-        CHAR(char.class, Character.BYTES, "putChar", "getChar"),
-        DOUBLE(double.class, Double.BYTES, "putDouble", "getDouble"),
-        FLOAT(float.class, Float.BYTES, "putFloat", "getFloat");
+        BYTE(byte.class, Byte.BYTES, "put", "get"), INT(int.class, Integer.BYTES, "putInt", "getInt"), LONG(long.class, Long.BYTES, "putLong", "getLong"), SHORT(short.class, Short.BYTES, "putShort", "getShort"), CHAR(char.class, Character.BYTES, "putChar", "getChar"), DOUBLE(double.class, Double.BYTES, "putDouble", "getDouble"), FLOAT(float.class, Float.BYTES, "putFloat", "getFloat");
 
         final Class<?> clazz;
         final int length;
@@ -33,7 +27,9 @@ public class ByteBuf {
         @SuppressWarnings("unchecked")
         <T> T get(ByteBuf buf) {
             try {
-                if (outOfBounds(buf, length)) throw new BufferUnderflowException();
+                if (outOfBounds(buf, length)) {
+                    throw new IndexOutOfBoundsException(invokes[1] + "(index:" + buf.readable() + ", newIndex:" + (buf.readable() - length + ") buffer has been exhausted"));
+                }
                 ByteBuffer buffer = buf.context();
                 Method method = buffer.getClass().getMethod(invokes[1]);
                 method.setAccessible(true);
@@ -62,7 +58,15 @@ public class ByteBuf {
         }
     }
 
-    public static final ByteBuffer BUFFER = alloc(1024, true);
+    private static final Blocking<ByteBuf> BLOCKING = new Blocking<>(alloc(1024), alloc(1024));
+
+    public static ByteBuf poll() {
+        return BLOCKING.poll();
+    }
+
+    public static ByteBuf await() throws InterruptedException {
+        return BLOCKING.await();
+    }
 
     protected static ByteBuffer alloc(int capacity, boolean direct) {
         return direct ? ByteBuffer.allocateDirect(capacity) : ByteBuffer.allocate(capacity);
@@ -105,12 +109,47 @@ public class ByteBuf {
     }
 
     public ByteBuf put(Class<?> clazz, Object value) {
-        DataType.find(clazz).put(this, value);
-        return this;
+        return DataType.find(clazz).put(this, value);
     }
 
     public ByteBuf write(ByteBuffer value) {
+        int remaining = value.remaining();
+        if (outOfBounds(this, remaining)) enlarge(remaining);
         buffer.put(value);
+        return this;
+    }
+
+    public ByteBuf write(ByteBuf buf) {
+        return write(buf.context());
+    }
+
+    public ByteBuf writeBytes(byte[] bytes, int offset, int length) {
+        if (offset < 0) throw new IndexOutOfBoundsException("writeBytes(offset:" + offset + ") is negative");
+        if (length <= 0)
+            throw new IndexOutOfBoundsException("writeBytes(length:" + length + ") must be greater than 0");
+        int reads = (offset + length);
+        if (reads > bytes.length)
+            throw new IndexOutOfBoundsException("writeBytes(offset + length:4, bytes:3) added sum is greater than bytes");
+        if (outOfBounds(this, reads)) enlarge(reads);
+        buffer.put(bytes, offset, length);
+        return this;
+    }
+
+    public ByteBuf writeBytes(byte[] bytes) {
+        return writeBytes(bytes, 0, bytes.length);
+    }
+
+    public ByteBuf readBytes(byte[] bytes, int offset, int length) {
+
+        if (offset < 0) throw new IndexOutOfBoundsException("readBytes(offset:" + offset + ") is negative");
+        if (length <= 0) throw new IndexOutOfBoundsException("readBytes(length:" + length + ") must be greater than 0");
+        if (length > readable()) throw new IndexOutOfBoundsException("buffer is to small");
+        if (bytes.length < length) throw new IndexOutOfBoundsException("test");
+
+        if (offset > length) throw new IndexOutOfBoundsException("offset to big");
+
+        //nio method
+        buffer.get(bytes, offset, length);
         return this;
     }
 
@@ -119,7 +158,7 @@ public class ByteBuf {
     }
 
     public byte readByte() {
-        return buffer.get();
+        return get(byte.class);
     }
 
     public ByteBuf writeInt(int value) {
@@ -175,7 +214,7 @@ public class ByteBuf {
 
         if (outOfBounds(this, Integer.BYTES + bytes.length)) enlarge(Integer.BYTES + bytes.length);
         writeInt(bytes.length);
-        for (byte aByte : bytes) writeByte(aByte);
+        writeBytes(bytes);
 
         return this;
     }
@@ -202,7 +241,7 @@ public class ByteBuf {
     }
 
     public void detach() {
-
+        BLOCKING.detach(this);
     }
 
     public byte[] array(boolean raw) {
